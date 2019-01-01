@@ -74,6 +74,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  DateTime currentMonth = DateTime.now();
   Map<DateTime, double> states = {};
   List<Transaction> transactions = [];
   List<TransSet> orderedTransactionSets = [];
@@ -85,68 +86,99 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void initAsyncState() async {
+    fetchAndParseSMS();
+  }
+
+  void fetchAndParseSMS() async {
+    transactions = [];
+    orderedTransactionSets = [];
+    setState(() {}); // show loading indicator
+
     SmsQuery query = new SmsQuery();
     List<SmsMessage> messages = await query.querySms(kinds: [
       SmsQueryKind.Inbox,
       //SmsQueryKind.Sent
     ], address: 'IhreBank');
-    print(messages.length);
-
-    var prevMonth = (DateTime.now().month - 1);
-    if (prevMonth == 0) {
-      prevMonth = 12;
-    }
+    print(messages.length.toString() + ' ' + currentMonth.toString());
 
     DateTime date;
     for (var m in messages) {
-      print([m.sender, m.date, m.body].join('\t'));
-      var lines = m.body.split('-');
-      print(lines);
+//      print([m.sender, m.date, m.body].join('\t'));
 
-      for (var l in lines) {
-        if (l.startsWith('KONTOSTAND')) {
-          var parts = l.split(' ');
-          date = DateTime.parse(parts[3].split('.').reversed.join('-'));
+      var lines;
+      if (m.body.startsWith('KONTOSTAND')) {
+        var datePresplit =
+            m.body.splitMapJoin(RegExp('\\.20\\d\\d'), onMatch: (m) {
+          print('match $m');
+          return m.group(0) + '///';
+        }, onNonMatch: (m) {
+          print('non-match $m');
+          return m.toString();
+        });
+        print(datePresplit);
+        var dateSplit = datePresplit.split('///');
+        print(dateSplit);
 
-          if (date.month != prevMonth) {
-            break;
-          }
+        var parts = dateSplit[0].split(' ');
 
-          var iState = double.parse(parts[2].replaceFirst(',', '.'));
-          print('$date: $iState');
-          this.states[date] = iState;
-          try {
-            var trans = Transaction.parse(date, parts.sublist(4).join(' '));
-            print(trans);
-            this.transactions.add(trans);
-          } on FormatException catch (e) {
-            //skip
-          }
-        } else {
-          if (l.startsWith('SEITE')) {
-            l = l.split(':').sublist(1).join(' ');
-            try {
-              var trans = Transaction.parse(date, l);
-              print(trans);
-              this.transactions.add(trans);
-            } on FormatException catch (e) {
-              //skip
-            }
-          } else {
-            try {
-              var trans = Transaction.parse(date, l);
-              print(trans);
-              this.transactions.add(trans);
-            } on FormatException catch (e) {
-              //skip
-            }
-          }
+        try {
+          var sDate = parts[3].split('.').reversed.join('-');
+          date = DateTime.parse(sDate);
+          print(date);
+        } on RangeError catch (e) {
+          print('Exception $e in [' + parts.toString() + ']');
+          print(m.body);
         }
+
+        var iState;
+        var sState = parts[2].replaceFirst(',', '.');
+        if (sState.endsWith('-')) {
+          iState = -double.parse(sState.substring(0, sState.length - 1));
+        } else {
+          iState = double.parse(sState);
+        }
+//          print('$date: $iState');
+        this.states[date] = iState;
+
+        lines = dateSplit[1].split(RegExp('\\d-'));
+      } else {
+        lines = m.body.split(RegExp('\\d-'));
       }
 
-      // break again from outside loop
-      if (date.month != prevMonth) {
-        break;
+      for (var l in lines) {
+        var trans;
+        if (l.startsWith('SEITE')) {
+          l = l.split(':').sublist(1).join(' ');
+          try {
+            trans = Transaction.parse(date, l);
+//              print(trans);
+          } on FormatException catch (e) {
+            //skip
+            print('Exception[' + l + ']');
+          }
+        } else {
+          try {
+            trans = Transaction.parse(date, l);
+//              print(trans);
+          } on FormatException catch (e) {
+            //skip
+            print('Exception[' + l + ']');
+          }
+        }
+
+        print(date.year.toString() +
+            ' ' +
+            currentMonth.year.toString() +
+            ' ' +
+            date.month.toString() +
+            ' ' +
+            currentMonth.month.toString());
+        if (trans != null &&
+            date.year == currentMonth.year &&
+            date.month == currentMonth.month) {
+          print(trans);
+          this.transactions.add(trans);
+        }
       }
     }
 
@@ -163,7 +195,8 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     for (var entry in ordered) {
-      print('${entry.total}\t${entry.code}');
+      print(
+          '${entry.data.first.date.toString()}\t${entry.total}\t${entry.code}');
     }
 
     setState(() {
@@ -177,7 +210,9 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
+        title: Text(currentMonth.year.toString() +
+            '-' +
+            currentMonth.month.toString().padLeft(2, '0')),
       ),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -199,13 +234,38 @@ class _MyHomePageState extends State<MyHomePage> {
                           dense: true,
                         );
                       }).toList()))
-              : CircularProgressIndicator()
+              : Center(child: CircularProgressIndicator())
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
+//      floatingActionButton: FloatingActionButton(
+//        onPressed: _incrementCounter,
+//        tooltip: 'Increment',
+//        child: Icon(Icons.add),
+//      ),
+      bottomSheet: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: <Widget>[
+          RaisedButton(
+            child: Text('Prev Month'),
+            onPressed: () {
+//              setState(() {
+              currentMonth = DateTime(
+                  currentMonth.year, currentMonth.month - 1, currentMonth.day);
+              fetchAndParseSMS();
+//              });
+            },
+          ),
+          RaisedButton(
+            child: Text('Next Month'),
+            onPressed: () {
+//              setState(() {
+              currentMonth = DateTime(
+                  currentMonth.year, currentMonth.month + 1, currentMonth.day);
+              fetchAndParseSMS();
+//              });
+            },
+          )
+        ],
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
