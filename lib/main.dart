@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:localstorage/localstorage.dart';
 import 'package:sms/sms.dart';
 
 import 'TransSet.dart';
@@ -34,6 +35,13 @@ class _MyHomePageState extends State<MyHomePage> {
   Map<DateTime, double> states = {};
   List<Transaction> transactions = [];
   List<TransSet> orderedTransactionSets = [];
+  Map<String, List<String>> statusList = {
+    'Food': [],
+    'Car': [],
+    'Entertainment': [],
+    'Restaurant': [],
+  };
+  final LocalStorage storage = new LocalStorage('MyHomePage');
 
   @override
   void initState() {
@@ -42,6 +50,13 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void initAsyncState() async {
+    await storage.ready;
+    Map<String, dynamic> data = storage.getItem('statusList');
+    for (var each in data.keys) {
+      for (var item in data[each]) {
+        statusList[each].add(item);
+      }
+    }
     fetchAndParseSMS();
   }
 
@@ -55,7 +70,7 @@ class _MyHomePageState extends State<MyHomePage> {
       SmsQueryKind.Inbox,
       //SmsQueryKind.Sent
     ], address: 'IhreBank');
-    print(messages.length.toString() + ' ' + currentMonth.toString());
+//    print(messages.length.toString() + ' ' + currentMonth.toString());
 
     DateTime date;
     for (var m in messages) {
@@ -65,22 +80,22 @@ class _MyHomePageState extends State<MyHomePage> {
       if (m.body.startsWith('KONTOSTAND')) {
         var datePresplit =
             m.body.splitMapJoin(RegExp('\\.20\\d\\d'), onMatch: (m) {
-          print('match $m');
+//          print('match $m');
           return m.group(0) + '///';
         }, onNonMatch: (m) {
-          print('non-match $m');
+//          print('non-match $m');
           return m.toString();
         });
-        print(datePresplit);
+//        print(datePresplit);
         var dateSplit = datePresplit.split('///');
-        print(dateSplit);
+//        print(dateSplit);
 
         var parts = dateSplit[0].split(' ');
 
         try {
           var sDate = parts[3].split('.').reversed.join('-');
           date = DateTime.parse(sDate);
-          print(date);
+//          print(date);
         } on RangeError catch (e) {
           print('Exception $e in [' + parts.toString() + ']');
           print(m.body);
@@ -122,17 +137,17 @@ class _MyHomePageState extends State<MyHomePage> {
           }
         }
 
-        print(date.year.toString() +
-            ' ' +
-            currentMonth.year.toString() +
-            ' ' +
-            date.month.toString() +
-            ' ' +
-            currentMonth.month.toString());
+//        print(date.year.toString() +
+//            ' ' +
+//            currentMonth.year.toString() +
+//            ' ' +
+//            date.month.toString() +
+//            ' ' +
+//            currentMonth.month.toString());
         if (trans != null &&
             date.year == currentMonth.year &&
             date.month == currentMonth.month) {
-          print(trans);
+//          print(trans);
           this.transactions.add(trans);
         }
       }
@@ -141,6 +156,12 @@ class _MyHomePageState extends State<MyHomePage> {
     Map<String, TransSet> sets = {};
     for (var t in transactions) {
       var code = t.note;
+      for (var each in statusList.keys) {
+        if (statusList[each].contains(code)) {
+          code = '[$each]';
+          break;
+        }
+      }
       sets[code] = sets[code] ?? TransSet(code);
       sets[code].add(t);
     }
@@ -150,10 +171,10 @@ class _MyHomePageState extends State<MyHomePage> {
       return a.total > b.total ? -1 : 1;
     });
 
-    for (var entry in ordered) {
-      print(
-          '${entry.data.first.date.toString()}\t${entry.total}\t${entry.code}');
-    }
+//    for (var entry in ordered) {
+//      print(
+//          '${entry.data.first.date.toString()}\t${entry.total}\t${entry.code}');
+//    }
 
     setState(() {
       orderedTransactionSets = ordered;
@@ -176,6 +197,12 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: ListView(
                       shrinkWrap: true,
                       children: orderedTransactionSets.map((set) {
+                        var chips;
+                        for (var each in statusList.keys) {
+                          if (statusList[each].contains(set.code)) {
+                            chips = Chip(label: Text(each));
+                          }
+                        }
                         return ListTile(
                           leading: Chip(
                             label: Text(set.data.length.toString()),
@@ -184,12 +211,16 @@ class _MyHomePageState extends State<MyHomePage> {
                             set.code,
                             style: Theme.of(context).textTheme.title,
                           ),
+                          subtitle: chips,
                           trailing: Text(set.total.toStringAsFixed(2)),
                           dense: true,
                           onTap: () {
                             Navigator.push(context, MaterialPageRoute(
                                 builder: (BuildContext context) {
-                              return TransSetView(set: set);
+                              return TransSetView(
+                                  set: set,
+                                  statusList: statusList,
+                                  storage: storage);
                             }));
                           },
                         );
