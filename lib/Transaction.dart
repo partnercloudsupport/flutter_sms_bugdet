@@ -3,9 +3,11 @@ import 'dart:convert';
 class Transaction {
   final DateTime date;
   final double amount;
-  final String note;
+  String note;
 
-  Transaction(this.date, this.amount, this.note);
+  Transaction(this.date, this.amount, this.note) {
+    this.note = this.note.trim();
+  }
 
   static parse(DateTime date, String row) {
     var amountStarts = row.indexOf(RegExp('\\d+,\\d+'));

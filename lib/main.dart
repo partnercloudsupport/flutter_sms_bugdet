@@ -95,6 +95,9 @@ class _MyHomePageState extends State<MyHomePage> {
                             chips = Chip(label: Text(each));
                           }
                         }
+
+                        var average = parser.getAverageFor(set.code);
+
                         return ListTile(
                           leading: Chip(
                             label: Text(set.data.length.toString()),
@@ -103,10 +106,26 @@ class _MyHomePageState extends State<MyHomePage> {
                             set.code,
                             style: Theme.of(context).textTheme.subtitle,
                           ),
-                          subtitle: Text(parser
-                              .getAverageFor(set.code)
-                              .toStringAsFixed(2)),
-                          trailing: Text(set.total.toStringAsFixed(2)),
+                          subtitle: average > 0
+                              ? Text('avg: ' + average.toStringAsFixed(2))
+                              : null,
+                          trailing: Column(children: [
+                            Text(
+                              set.total.toStringAsFixed(2),
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  color: average > 0
+                                      ? (set.total > average
+                                          ? Colors.red
+                                          : Colors.green)
+                                      : Colors.black),
+                            ),
+                            Text(average > 0
+                                ? (set.total / average * 100)
+                                        .toStringAsFixed(2) +
+                                    '%'
+                                : '')
+                          ]),
                           dense: true,
                           onTap: () {
                             Navigator.push(context, MaterialPageRoute(

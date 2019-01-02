@@ -1,10 +1,12 @@
 import 'Transaction.dart';
 
 class TransSet {
-  final String code;
+  String code;
   List<Transaction> data = [];
 
-  TransSet(this.code);
+  TransSet(this.code) {
+    this.code = this.code.trim();
+  }
 
   void add(Transaction t) {
     data.add(t);

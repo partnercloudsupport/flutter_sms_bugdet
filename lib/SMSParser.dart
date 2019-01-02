@@ -151,29 +151,49 @@ class SMSParser {
   }
 
   void buildPerMonth() {
+    print('buildPerMonth()');
     for (var t in transactions) {
       var month = DateTime(t.date.year, t.date.month, 1);
-      perMonth[month] = perMonth[t.date] ?? [];
+      if (perMonth[month] == null) {
+        perMonth[month] = [];
+      }
       perMonth[month].add(t);
+    }
+    print(perMonth.keys);
+    for (var key in perMonth.keys) {
+      print(key.toString() + '\t' + perMonth[key].length.toString());
     }
   }
 
   double getAverageFor(String note) {
-    perMonth ?? buildPerMonth();
+    if (perMonth.length == 0) {
+      buildPerMonth();
+    }
     List<double> sumPerMonth = [];
     for (var monthData in perMonth.values) {
       double sum = 0;
       for (var t in monthData) {
         if (t.note == note) {
           sum += t.amount;
+          print(note +
+              '\t+' +
+              t.amount.toStringAsFixed(2) +
+              '\t=' +
+              sum.toStringAsFixed(2));
         }
       }
       if (sum > 0) {
         sumPerMonth.add(sum);
       }
     }
-    if (sumPerMonth.length > 0) {
-      return sumPerMonth.reduce((total, el) => total + el) / sumPerMonth.length;
+
+    // average of a single value is not interesting
+    if (sumPerMonth.length > 1) {
+      var avg =
+          sumPerMonth.reduce((total, el) => total + el) / sumPerMonth.length;
+      print(
+          note + '\t' + sumPerMonth.toString() + '\t' + avg.toStringAsFixed(2));
+      return avg;
     }
     return 0;
   }
