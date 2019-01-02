@@ -1,53 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:sms/sms.dart';
 
-class Transaction {
-  final DateTime date;
-  final double amount;
-  final String note;
-
-  Transaction(this.date, this.amount, this.note);
-
-  static parse(DateTime date, String row) {
-    var amountStarts = row.indexOf(RegExp('\\d+,\\d+'));
-    if (amountStarts == -1) {
-      throw FormatException();
-    }
-    var amount =
-        double.parse(row.substring(amountStarts).replaceFirst(',', '.'));
-    var before = row.substring(0, amountStarts).trim();
-    return Transaction(date, amount, before);
-  }
-
-  String toString() {
-    return jsonEncode({
-      'date': date.toString(),
-      'amount': amount,
-      'note': note,
-    });
-  }
-}
-
-class TransSet {
-  final String code;
-  List<Transaction> data = [];
-
-  TransSet(this.code);
-
-  void add(Transaction t) {
-    data.add(t);
-  }
-
-  double get total {
-    var sum = 0.0;
-    for (var t in data) {
-      sum += t.amount;
-    }
-    return sum;
-  }
-}
+import 'TransSet.dart';
+import 'TransSetView.dart';
+import 'Transaction.dart';
 
 void main() => runApp(MyApp());
 
@@ -204,8 +160,6 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void _incrementCounter() {}
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -232,6 +186,12 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                           trailing: Text(set.total.toStringAsFixed(2)),
                           dense: true,
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(
+                                builder: (BuildContext context) {
+                              return TransSetView(set: set);
+                            }));
+                          },
                         );
                       }).toList()))
               : Center(child: CircularProgressIndicator())
@@ -242,30 +202,33 @@ class _MyHomePageState extends State<MyHomePage> {
 //        tooltip: 'Increment',
 //        child: Icon(Icons.add),
 //      ),
-      bottomSheet: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: <Widget>[
-          RaisedButton(
-            child: Text('Prev Month'),
-            onPressed: () {
+      bottomSheet: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            RaisedButton(
+              child: Text('Prev Month'),
+              onPressed: () {
 //              setState(() {
-              currentMonth = DateTime(
-                  currentMonth.year, currentMonth.month - 1, currentMonth.day);
-              fetchAndParseSMS();
+                currentMonth = DateTime(currentMonth.year,
+                    currentMonth.month - 1, currentMonth.day);
+                fetchAndParseSMS();
 //              });
-            },
-          ),
-          RaisedButton(
-            child: Text('Next Month'),
-            onPressed: () {
+              },
+            ),
+            RaisedButton(
+              child: Text('Next Month'),
+              onPressed: () {
 //              setState(() {
-              currentMonth = DateTime(
-                  currentMonth.year, currentMonth.month + 1, currentMonth.day);
-              fetchAndParseSMS();
+                currentMonth = DateTime(currentMonth.year,
+                    currentMonth.month + 1, currentMonth.day);
+                fetchAndParseSMS();
 //              });
-            },
-          )
-        ],
+              },
+            )
+          ],
+        ),
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
