@@ -26,7 +26,7 @@ class SMSParser {
 
 //    saveMessages(messages);
 
-    DateTime date;
+    DateTime date = DateTime.now();
     for (var m in messages) {
 //      print([m.sender, m.date, m.body].join('\t'));
 
