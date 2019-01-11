@@ -8,11 +8,10 @@ import 'package:sms/sms.dart';
 import 'TransSet.dart';
 import 'Transaction.dart';
 
-Map<DateTime, double> globalStates = {};
-
 /// this it put outside the class because compute() requires it
-List<Transaction> globalReadAndParse(List<SmsMessage> messages) {
+List globalReadAndParse(List<SmsMessage> messages) {
   List<Transaction> transactions = [];
+  Map<DateTime, double> globalStates = {};
 
   DateTime date = DateTime.now();
   for (var m in messages) {
@@ -85,7 +84,7 @@ List<Transaction> globalReadAndParse(List<SmsMessage> messages) {
     }
   }
   print('Parsed ${transactions.length} transactions');
-  return transactions;
+  return [transactions, globalStates];
 }
 
 class SMSParser {
@@ -98,8 +97,9 @@ class SMSParser {
   SMSParser(this.statusList);
 
   Future<int> readAndParse(List<SmsMessage> messages) async {
-    this.transactions = await compute(globalReadAndParse, messages);
-    this.states = globalStates; // ugly variable passing
+    var pair = await compute(globalReadAndParse, messages);
+    this.transactions = pair[0];
+    this.states = pair[1]; // ugly variable passing
     return this.transactions.length;
   }
 
@@ -220,5 +220,22 @@ class SMSParser {
     var pages = perMonth.keys.toList();
     pages.sort();
     return pages[index];
+  }
+
+  double getRemainingFor(DateTime month) {
+    print(states);
+    var statesThisMonth = states.entries.where((MapEntry<DateTime, double> el) {
+      return el.key.year == month.year && el.key.month == month.month;
+    }).toList();
+    statesThisMonth
+        .sort((MapEntry<DateTime, double> a, MapEntry<DateTime, double> b) {
+      return a.key.isBefore(b.key) ? -1 : 1;
+    });
+    print(statesThisMonth);
+    if (statesThisMonth.length > 0) {
+      return statesThisMonth.last.value;
+    } else {
+      return 0;
+    }
   }
 }

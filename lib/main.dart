@@ -34,6 +34,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  int currentPage = 0;
   DateTime currentMonth = DateTime.now();
   SMSParser parser;
   List<TransSet> orderedTransactionSets = [];
@@ -45,9 +46,16 @@ class _MyHomePageState extends State<MyHomePage> {
     'Transport': [],
     'Travel': [],
     'Children': [],
+    'Telecommunication': [],
+    'Furniture': [],
+    'Savings': [],
+    'House': [],
+    'Education': [],
+    'Charity': [],
   };
   final LocalStorage storage = new LocalStorage('MyHomePage');
   PageController _controller;
+  final _pages = <int, Widget>{};
 
   @override
   void initState() {
@@ -66,8 +74,9 @@ class _MyHomePageState extends State<MyHomePage> {
     print(statusList);
     parser = SMSParser(statusList);
     await fetchAndParseSMS();
-    _controller =
-        PageController(initialPage: parser.getMonths() - 1, keepPage: true);
+
+    currentPage = parser.getMonths() - 1;
+    _controller = PageController(initialPage: currentPage, keepPage: true);
   }
 
   Future fetchAndParseSMS() async {
@@ -99,10 +108,17 @@ class _MyHomePageState extends State<MyHomePage> {
     var size = MediaQuery.of(context).size;
     return Scaffold(
       appBar: AppBar(
-        title: Text(currentMonth.year.toString() +
-            '-' +
-            currentMonth.month.toString().padLeft(2, '0')),
-      ),
+          title: Text(currentMonth.year.toString() +
+              '-' +
+              currentMonth.month.toString().padLeft(2, '0')),
+          actions: <Widget>[
+            parser != null
+                ? Chip(
+                    label: Text(parser
+                        .getRemainingFor(currentMonth)
+                        .toStringAsFixed(2)))
+                : Container(),
+          ]),
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
@@ -114,12 +130,16 @@ class _MyHomePageState extends State<MyHomePage> {
                     controller: _controller,
                     itemCount: parser.getMonths(),
                     itemBuilder: (BuildContext context, int index) {
-                      currentMonth = parser.getMonthNr(index);
-                      print('** PAGE $index month ${currentMonth.toString()}');
-                      return buildListView(context);
+                      return _pages.putIfAbsent(index, () {
+                        currentMonth = parser.getMonthNr(index);
+                        print(
+                            '** PAGE $index month ${currentMonth.toString()}');
+                        return buildListView(context);
+                      });
                     },
                     onPageChanged: (int index) {
                       setState(() {
+                        currentPage = index;
                         currentMonth = parser.getMonthNr(index);
                       });
                     },
@@ -144,7 +164,8 @@ class _MyHomePageState extends State<MyHomePage> {
               ]),
               onPressed: () {
                 _controller.previousPage(
-                    duration: Duration(milliseconds: 500), curve: Curves.ease);
+                    duration: Duration(milliseconds: 1000),
+                    curve: Curves.easeInOut);
               },
             ),
             RaisedButton(
@@ -156,7 +177,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ? () {
                       _controller.nextPage(
                           duration: Duration(milliseconds: 1000),
-                          curve: Curves.ease);
+                          curve: Curves.easeInOut);
                     }
                   : null,
             )
@@ -166,7 +187,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget buildListView(context) {
+  Widget buildListView(BuildContext context) {
     orderedTransactionSets = parser.getOrderedTransactionSetsFor(currentMonth);
     return ConstrainedBox(
         constraints: const BoxConstraints.expand(),
@@ -184,39 +205,52 @@ class _MyHomePageState extends State<MyHomePage> {
               var average = parser.getAverageFor(set.code);
 
               return ListTile(
-                leading: Chip(
-                  label: Text(set.data.length.toString()),
-                ),
-                title: Text(
-                  set.code,
-                  style: Theme.of(context).textTheme.subtitle,
-                ),
-                subtitle: average > 0
-                    ? Text('avg: ' + average.toStringAsFixed(2))
-                    : Wrap(children: chips),
-                trailing: Column(children: [
-                  Text(
-                    set.total.toStringAsFixed(2),
-                    style: TextStyle(
-                        fontSize: 18,
-                        color: average > 0
-                            ? (set.total > average ? Colors.red : Colors.green)
-                            : Colors.black),
+                  leading: Chip(
+                    label: Text(set.data.length.toString()),
                   ),
-                  Text(average > 0
-                      ? (set.total / average * 100).toStringAsFixed(2) + '%'
-                      : '')
-                ]),
-                dense: true,
-                onTap: () async {
-                  await Navigator.push(context,
-                      MaterialPageRoute(builder: (BuildContext context) {
-                    return TransSetView(
-                        set: set, statusList: statusList, storage: storage);
-                  }));
-                  fetchAndParseSMS();
-                },
-              );
+                  title: set.code[0] == '['
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: Chip(
+                            label: Text(
+                                set.code.substring(1, set.code.length - 1)),
+                          ))
+                      : Text(
+                          set.code,
+                          style: Theme.of(context).textTheme.subtitle,
+                        ),
+                  subtitle: average > 0
+                      ? Text('avg: ' + average.toStringAsFixed(2))
+                      : Wrap(children: chips),
+                  trailing: Column(children: [
+                    Text(
+                      set.total.toStringAsFixed(2),
+                      style: TextStyle(
+                          fontSize: 18,
+                          color: average > 0
+                              ? (set.total > average
+                                  ? Colors.red
+                                  : Colors.green)
+                              : Colors.black),
+                    ),
+                    Text(average > 0
+                        ? (set.total / average * 100).toStringAsFixed(2) + '%'
+                        : '')
+                  ]),
+                  dense: true,
+                  onTap: () async {
+                    await Navigator.push(context,
+                        MaterialPageRoute(builder: (BuildContext context) {
+                      return TransSetView(
+                          set: set, statusList: statusList, storage: storage);
+                    }));
+//                  fetchAndParseSMS();
+                    setState(() {
+                      _pages.update(currentPage, (Widget old) {
+                        return buildListView(context);
+                      });
+                    });
+                  });
             }).toList()));
   }
 
