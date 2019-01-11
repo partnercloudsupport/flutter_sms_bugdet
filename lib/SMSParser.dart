@@ -1,10 +1,92 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:sms/sms.dart';
 
 import 'TransSet.dart';
 import 'Transaction.dart';
+
+Map<DateTime, double> globalStates = {};
+
+/// this it put outside the class because compute() requires it
+List<Transaction> globalReadAndParse(List<SmsMessage> messages) {
+  List<Transaction> transactions = [];
+
+  DateTime date = DateTime.now();
+  for (var m in messages) {
+//      print([m.sender, m.date, m.body].join('\t'));
+
+    var lines;
+    if (m.body.startsWith('KONTOSTAND')) {
+      var datePresplit =
+          m.body.splitMapJoin(RegExp('\\.20\\d\\d'), onMatch: (m) {
+//          print('match $m');
+        return m.group(0) + '///';
+      }, onNonMatch: (m) {
+//          print('non-match $m');
+        return m.toString();
+      });
+//        print(datePresplit);
+      var dateSplit = datePresplit.split('///');
+//        print(dateSplit);
+
+      var parts = dateSplit[0].split(' ');
+
+      try {
+        var sDate = parts[3].split('.').reversed.join('-');
+        date = DateTime.parse(sDate);
+//          print(date);
+      } on RangeError catch (e) {
+        print('Exception $e in [' + parts.toString() + ']');
+        print(m.body);
+      }
+
+      var iState;
+      var sState = parts[2].replaceFirst(',', '.');
+      if (sState.endsWith('-')) {
+        iState = -double.parse(sState.substring(0, sState.length - 1));
+      } else {
+        iState = double.parse(sState);
+      }
+//          print('$date: $iState');
+      globalStates[date] = iState;
+
+      lines = dateSplit[1].split(RegExp('\\d-'));
+    } else {
+      lines = m.body.split(RegExp('\\d-'));
+    }
+
+    for (var l in lines) {
+      var trans;
+      if (l.startsWith('SEITE')) {
+        l = l.split(':').sublist(1).join(' ');
+        try {
+          trans = Transaction.parse(date, l);
+//              print(trans);
+        } on FormatException {
+          //skip
+          print('Exception[' + l + ']');
+        }
+      } else {
+        try {
+          trans = Transaction.parse(date, l);
+//              print(trans);
+        } on FormatException {
+          //skip
+          print('Exception[' + l + ']');
+        }
+      }
+
+      if (trans != null) {
+        transactions.add(trans);
+      }
+    }
+  }
+  print('Parsed ${transactions.length} transactions');
+  return transactions;
+}
 
 class SMSParser {
   Map<String, List<String>> statusList;
@@ -15,91 +97,15 @@ class SMSParser {
 
   SMSParser(this.statusList);
 
-  Future readAndParse() async {
-    print('Querying SMS...');
-    SmsQuery query = new SmsQuery();
-    List<SmsMessage> messages = await query.querySms(kinds: [
-      SmsQueryKind.Inbox,
-      //SmsQueryKind.Sent
-    ], address: 'IhreBank');
-    print('Fetched ${messages.length}');
-
-//    saveMessages(messages);
-
-    DateTime date = DateTime.now();
-    for (var m in messages) {
-//      print([m.sender, m.date, m.body].join('\t'));
-
-      var lines;
-      if (m.body.startsWith('KONTOSTAND')) {
-        var datePresplit =
-            m.body.splitMapJoin(RegExp('\\.20\\d\\d'), onMatch: (m) {
-//          print('match $m');
-          return m.group(0) + '///';
-        }, onNonMatch: (m) {
-//          print('non-match $m');
-          return m.toString();
-        });
-//        print(datePresplit);
-        var dateSplit = datePresplit.split('///');
-//        print(dateSplit);
-
-        var parts = dateSplit[0].split(' ');
-
-        try {
-          var sDate = parts[3].split('.').reversed.join('-');
-          date = DateTime.parse(sDate);
-//          print(date);
-        } on RangeError catch (e) {
-          print('Exception $e in [' + parts.toString() + ']');
-          print(m.body);
-        }
-
-        var iState;
-        var sState = parts[2].replaceFirst(',', '.');
-        if (sState.endsWith('-')) {
-          iState = -double.parse(sState.substring(0, sState.length - 1));
-        } else {
-          iState = double.parse(sState);
-        }
-//          print('$date: $iState');
-        this.states[date] = iState;
-
-        lines = dateSplit[1].split(RegExp('\\d-'));
-      } else {
-        lines = m.body.split(RegExp('\\d-'));
-      }
-
-      for (var l in lines) {
-        var trans;
-        if (l.startsWith('SEITE')) {
-          l = l.split(':').sublist(1).join(' ');
-          try {
-            trans = Transaction.parse(date, l);
-//              print(trans);
-          } on FormatException {
-            //skip
-            print('Exception[' + l + ']');
-          }
-        } else {
-          try {
-            trans = Transaction.parse(date, l);
-//              print(trans);
-          } on FormatException {
-            //skip
-            print('Exception[' + l + ']');
-          }
-        }
-
-        if (trans != null) {
-          this.transactions.add(trans);
-        }
-      }
-    }
-    print('Parsed ${transactions.length} transactions');
+  Future<int> readAndParse(List<SmsMessage> messages) async {
+    this.transactions = await compute(globalReadAndParse, messages);
+    this.states = globalStates; // ugly variable passing
+    return this.transactions.length;
   }
 
   getOrderedTransactionSetsFor(DateTime currentMonth) {
+    print('this month ${currentMonth.toString()}');
+    print('filtering ${this.transactions.length}');
     var transactionsThisMonth = this.transactions.where((Transaction t) {
       var date = t.date;
       if (date.year == currentMonth.year && date.month == currentMonth.month) {
@@ -107,6 +113,7 @@ class SMSParser {
       }
       return false;
     });
+    print('trans this month ${transactionsThisMonth.length}');
 
     Map<String, TransSet> sets = {};
     for (var t in transactionsThisMonth) {
@@ -120,6 +127,7 @@ class SMSParser {
       sets[code] = sets[code] ?? TransSet(code);
       sets[code].add(t);
     }
+    print('sets ${sets.keys.length}');
 
     List<TransSet> ordered = sets.values.toList();
     ordered.sort((a, b) {
@@ -159,10 +167,10 @@ class SMSParser {
       }
       perMonth[month].add(t);
     }
-    print(perMonth.keys);
-    for (var key in perMonth.keys) {
-      print(key.toString() + '\t' + perMonth[key].length.toString());
-    }
+//    print(perMonth.keys);
+//    for (var key in perMonth.keys) {
+//      print(key.toString() + '\t' + perMonth[key].length.toString());
+//    }
   }
 
   double getAverageFor(String note) {
@@ -175,11 +183,11 @@ class SMSParser {
       for (var t in monthData) {
         if (t.note == note) {
           sum += t.amount;
-          print(note +
-              '\t+' +
-              t.amount.toStringAsFixed(2) +
-              '\t=' +
-              sum.toStringAsFixed(2));
+//          print(note +
+//              '\t+' +
+//              t.amount.toStringAsFixed(2) +
+//              '\t=' +
+//              sum.toStringAsFixed(2));
         }
       }
       if (sum > 0) {
@@ -191,10 +199,26 @@ class SMSParser {
     if (sumPerMonth.length > 1) {
       var avg =
           sumPerMonth.reduce((total, el) => total + el) / sumPerMonth.length;
-      print(
-          note + '\t' + sumPerMonth.toString() + '\t' + avg.toStringAsFixed(2));
+//      print(
+//          note + '\t' + sumPerMonth.toString() + '\t' + avg.toStringAsFixed(2));
       return avg;
     }
     return 0;
+  }
+
+  int getMonths() {
+    if (perMonth.length == 0) {
+      buildPerMonth();
+    }
+    return perMonth.keys.length;
+  }
+
+  DateTime getMonthNr(int index) {
+    if (perMonth.length == 0) {
+      buildPerMonth();
+    }
+    var pages = perMonth.keys.toList();
+    pages.sort();
+    return pages[index];
   }
 }

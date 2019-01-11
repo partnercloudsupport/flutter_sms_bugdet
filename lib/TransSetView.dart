@@ -58,7 +58,7 @@ class TransSetViewState extends State<TransSetView> {
                       dense: true,
                     );
                   }).toList())),
-          Row(
+          Wrap(
               children: widget.statusList.keys.map((status) {
             return ChoiceChip(
               label: Text(status),
